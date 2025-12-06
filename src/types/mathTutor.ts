@@ -32,12 +32,24 @@ export interface ChatSession {
   solutionSteps: SolutionStep[];
   isCompleted: boolean;
   currentQuestion: string;
+  topic?: string; // Detected topic of the problem
 }
 
 export interface LeaderboardEntry {
   userId: string;
   userName: string;
   score: number;
+}
+
+export interface TopicStats {
+  topic: string;
+  totalQuestions: number;
+  correctlyAnswered: number;
+}
+
+export interface UserTopicStats {
+  userId: string;
+  stats: TopicStats[];
 }
 
 export type GuidanceMode = 'guided' | 'soft';

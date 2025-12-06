@@ -1,10 +1,11 @@
-import { User, ChatSession, LeaderboardEntry } from '@/types/mathTutor';
+import { User, ChatSession, LeaderboardEntry, TopicStats, UserTopicStats } from '@/types/mathTutor';
 
 const USERS_KEY = 'math_tutor_users';
 const SESSIONS_KEY = 'math_tutor_sessions';
 const LEADERBOARD_KEY = 'math_tutor_leaderboard';
 const CURRENT_USER_KEY = 'math_tutor_current_user';
 const CURRENT_SESSION_KEY = 'math_tutor_current_session';
+const TOPIC_STATS_KEY = 'math_tutor_topic_stats';
 
 // Demo data
 const DEMO_USERS: User[] = [
@@ -151,4 +152,53 @@ export function addScore(userId: string, userName: string, score: number): Score
   const newRank = getUserRank(userId) || leaderboard.length;
   
   return { previousRank, newRank, totalScore };
+}
+
+// Topic Statistics
+export function getAllTopicStats(): UserTopicStats[] {
+  const data = localStorage.getItem(TOPIC_STATS_KEY);
+  return data ? JSON.parse(data) : [];
+}
+
+export function getUserTopicStats(userId: string): TopicStats[] {
+  const allStats = getAllTopicStats();
+  const userStats = allStats.find(s => s.userId === userId);
+  return userStats?.stats || [];
+}
+
+export function updateTopicStats(userId: string, topic: string, isCorrect: boolean): void {
+  const allStats = getAllTopicStats();
+  let userStats = allStats.find(s => s.userId === userId);
+  
+  if (!userStats) {
+    userStats = { userId, stats: [] };
+    allStats.push(userStats);
+  }
+  
+  let topicStats = userStats.stats.find(s => s.topic === topic);
+  
+  if (!topicStats) {
+    topicStats = { topic, totalQuestions: 0, correctlyAnswered: 0 };
+    userStats.stats.push(topicStats);
+  }
+  
+  topicStats.totalQuestions += 1;
+  if (isCorrect) {
+    topicStats.correctlyAnswered += 1;
+  }
+  
+  localStorage.setItem(TOPIC_STATS_KEY, JSON.stringify(allStats));
+}
+
+export function getAvailableTopics(): string[] {
+  const allStats = getAllTopicStats();
+  const topicsSet = new Set<string>();
+  
+  allStats.forEach(userStats => {
+    userStats.stats.forEach(stat => {
+      topicsSet.add(stat.topic);
+    });
+  });
+  
+  return Array.from(topicsSet).sort();
 }

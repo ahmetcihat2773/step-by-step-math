@@ -16,10 +16,11 @@ RULES:
 6. Write mathematical expressions properly (x^2, etc.)
 7. Be encouraging and supportive
 8. Always respond in English
+9. In your FIRST message when analyzing a new problem, you MUST include a topic tag in the format [TOPIC: Topic Name] at the very beginning. Choose from: Algebra, Calculus, Geometry, Trigonometry, Statistics, Probability, Linear Algebra, Number Theory, Differential Equations, Integration, Derivatives, Limits, Polynomials, Equations, Inequalities, Functions, Logarithms, Exponentials, Sequences, Series, Vectors, Matrices, Complex Numbers, Combinatorics, or a similar specific mathematical topic.
 
 EXAMPLE DIALOG:
 If the problem is x³ + x = 2:
-- First message: "Problem: x³ + x = 2. What do you think we should do first to solve this equation?"
+- First message: "[TOPIC: Algebra] Problem: x³ + x = 2. What do you think we should do first to solve this equation?"
 - If student answers correctly: "Great! What should we do next?"
 - If student answers incorrectly: "Hmm, that approach isn't quite right. Let's think about it this way: [hint]"
 - If student says "I don't know": "No problem! Hint: [give hint but not the answer]"`;
@@ -35,11 +36,34 @@ RULES:
 6. Be encouraging but efficient
 7. Always respond in English
 8. When all steps are complete, congratulate the student
+9. In your FIRST message when analyzing a new problem, you MUST include a topic tag in the format [TOPIC: Topic Name] at the very beginning. Choose from: Algebra, Calculus, Geometry, Trigonometry, Statistics, Probability, Linear Algebra, Number Theory, Differential Equations, Integration, Derivatives, Limits, Polynomials, Equations, Inequalities, Functions, Logarithms, Exponentials, Sequences, Series, Vectors, Matrices, Complex Numbers, Combinatorics, or a similar specific mathematical topic.
 
 RESPONSE FORMAT:
+- For first analysis: "[TOPIC: Topic Name] Let's solve this problem. [problem description]. [first step question]"
 - For correct answers: "Correct! [brief explanation]. Moving on... [next step question]"
 - For wrong answers: "Not quite. The correct approach here is [explanation]. Let's continue... [next step question]"
 - For final step: "Excellent work! You've solved the problem. [brief summary]"`;
+
+const PRACTICE_SYSTEM_PROMPT = `You are a mathematics tutor generating practice problems for a specific topic.
+
+You will be given a topic to generate a practice problem for. Create a clear, well-defined problem for that topic.
+
+RULES:
+1. Generate a problem appropriate for high school or early college level
+2. The problem should be solvable in 3-6 steps
+3. Start by presenting the problem clearly
+4. Include [TOPIC: Topic Name] at the beginning of your response
+5. After presenting the problem, ask the student what they think the first step should be
+6. Always respond in English
+7. Write mathematical expressions properly (x^2, etc.)
+
+EXAMPLE:
+For topic "Integration":
+"[TOPIC: Integration] Here's a practice problem for you:
+
+Find the integral: ∫(3x² + 2x - 5)dx
+
+What do you think we should do first to solve this integral?"`;
 
 interface ChatMessage {
   role: string;
@@ -52,71 +76,85 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, imageBase64, guidanceMode = 'guided' } = await req.json();
+    const { messages, imageBase64, guidanceMode = 'guided', practiceMode = false, practiceTopic = '' } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    const systemPrompt = guidanceMode === 'soft' ? SOFT_SYSTEM_PROMPT : GUIDED_SYSTEM_PROMPT;
+    let systemPrompt: string;
+    
+    if (practiceMode && practiceTopic) {
+      systemPrompt = PRACTICE_SYSTEM_PROMPT;
+    } else {
+      systemPrompt = guidanceMode === 'soft' ? SOFT_SYSTEM_PROMPT : GUIDED_SYSTEM_PROMPT;
+    }
 
     const apiMessages: ChatMessage[] = [
       { role: "system", content: systemPrompt },
     ];
 
-    const imagePrompt = guidanceMode === 'soft' 
-      ? "Analyze the math problem in this image and start teaching the student step by step. First explain the problem, then ask what the first step should be. Progress efficiently through each step."
-      : "Analyze the math problem in this image and start teaching the student step by step. First explain the problem, then ask what they think the first step should be.";
-
-    // If there's an image, add it as the first user message with vision
-    if (imageBase64 && messages.length === 0) {
+    // Practice mode - generate a problem for the topic
+    if (practiceMode && practiceTopic && messages.length === 0) {
       apiMessages.push({
         role: "user",
-        content: [
-          {
-            type: "text",
-            text: imagePrompt
-          },
-          {
-            type: "image_url",
-            image_url: {
-              url: imageBase64
-            }
-          }
-        ]
+        content: `Generate a practice problem for the topic: ${practiceTopic}. Present the problem and ask the student how to start solving it.`
       });
-    } else if (imageBase64) {
-      // Image with existing conversation
-      apiMessages.push({
-        role: "user",
-        content: [
-          {
-            type: "text",
-            text: imagePrompt
-          },
-          {
-            type: "image_url",
-            image_url: {
-              url: imageBase64
-            }
-          }
-        ]
-      });
-      // Add rest of the conversation
-      for (const msg of messages) {
-        apiMessages.push({
-          role: msg.role,
-          content: msg.content
-        });
-      }
     } else {
-      // No image, just conversation
-      for (const msg of messages) {
+      const imagePrompt = guidanceMode === 'soft' 
+        ? "Analyze the math problem in this image and start teaching the student step by step. First explain the problem, then ask what the first step should be. Progress efficiently through each step."
+        : "Analyze the math problem in this image and start teaching the student step by step. First explain the problem, then ask what they think the first step should be.";
+
+      // If there's an image, add it as the first user message with vision
+      if (imageBase64 && messages.length === 0) {
         apiMessages.push({
-          role: msg.role,
-          content: msg.content
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: imagePrompt
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: imageBase64
+              }
+            }
+          ]
         });
+      } else if (imageBase64) {
+        // Image with existing conversation
+        apiMessages.push({
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: imagePrompt
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: imageBase64
+              }
+            }
+          ]
+        });
+        // Add rest of the conversation
+        for (const msg of messages) {
+          apiMessages.push({
+            role: msg.role,
+            content: msg.content
+          });
+        }
+      } else {
+        // No image, just conversation
+        for (const msg of messages) {
+          apiMessages.push({
+            role: msg.role,
+            content: msg.content
+          });
+        }
       }
     }
 
