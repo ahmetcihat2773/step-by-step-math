@@ -7,6 +7,7 @@ import { ModeSelector } from '@/components/ModeSelector';
 import { UserSetup } from '@/components/UserSetup';
 import { Leaderboard } from '@/components/Leaderboard';
 import { CelebrationOverlay } from '@/components/CelebrationOverlay';
+import { SessionCompleteDialog } from '@/components/SessionCompleteDialog';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Trophy, BookOpen, Zap } from 'lucide-react';
 import { User } from '@/types/mathTutor';
@@ -23,11 +24,14 @@ export default function Index() {
     uploadedImage,
     guidanceMode,
     celebration,
+    showSessionComplete,
     sendMessage,
     startWithImage,
     selectMode,
     reset,
     dismissCelebration,
+    startNewProblem,
+    endSession,
   } = useMathTutor(user);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -199,6 +203,13 @@ export default function Index() {
         newRank={celebration.newRank}
         previousRank={celebration.previousRank}
         onComplete={dismissCelebration}
+      />
+
+      {/* Session Complete Dialog */}
+      <SessionCompleteDialog
+        show={showSessionComplete}
+        onNewProblem={startNewProblem}
+        onEndSession={endSession}
       />
     </div>
   );
