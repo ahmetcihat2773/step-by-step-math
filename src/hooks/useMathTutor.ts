@@ -288,6 +288,10 @@ export const useMathTutor = (user: User | null) => {
         const topic = extractTopic(assistantContent);
         if (topic) {
           setDetectedTopic(topic);
+          // Register topic immediately when detected (with totalQuestions: 0 initially)
+          if (user) {
+            updateTopicStats(user.id, topic, false, true);
+          }
         }
       }
       

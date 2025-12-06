@@ -166,7 +166,7 @@ export function getUserTopicStats(userId: string): TopicStats[] {
   return userStats?.stats || [];
 }
 
-export function updateTopicStats(userId: string, topic: string, isCorrect: boolean): void {
+export function updateTopicStats(userId: string, topic: string, isCorrect: boolean, registerOnly: boolean = false): void {
   const allStats = getAllTopicStats();
   let userStats = allStats.find((s) => s.userId === userId);
 
@@ -182,9 +182,12 @@ export function updateTopicStats(userId: string, topic: string, isCorrect: boole
     userStats.stats.push(topicStats);
   }
 
-  topicStats.totalQuestions += 1;
-  if (isCorrect) {
-    topicStats.correctlyAnswered += 1;
+  // If registerOnly is true, just ensure the topic exists without incrementing counts
+  if (!registerOnly) {
+    topicStats.totalQuestions += 1;
+    if (isCorrect) {
+      topicStats.correctlyAnswered += 1;
+    }
   }
 
   localStorage.setItem(TOPIC_STATS_KEY, JSON.stringify(allStats));
