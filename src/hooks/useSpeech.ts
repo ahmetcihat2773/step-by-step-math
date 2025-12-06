@@ -44,6 +44,9 @@ function cleanTextForSpeech(text: string): string {
     .trim();
 }
 
+const MAX_LISTEN_TIME = 30000; // 30 seconds max
+const SILENCE_TIMEOUT = 3000; // 3 seconds of silence to auto-stop
+
 export const useSpeech = (): UseSpeechReturn => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -54,6 +57,9 @@ export const useSpeech = (): UseSpeechReturn => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const maxTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasReceivedSpeechRef = useRef(false);
 
   // Check browser support
   useEffect(() => {
@@ -75,6 +81,11 @@ export const useSpeech = (): UseSpeechReturn => {
       recognition.lang = 'en-US';
 
       recognition.onresult = (event) => {
+        // Clear silence timeout on any speech
+        if (silenceTimeoutRef.current) {
+          clearTimeout(silenceTimeoutRef.current);
+        }
+        
         let finalTranscript = '';
         let interimTranscript = '';
 
@@ -82,6 +93,7 @@ export const useSpeech = (): UseSpeechReturn => {
           const transcript = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
             finalTranscript += transcript + ' ';
+            hasReceivedSpeechRef.current = true;
           } else {
             interimTranscript += transcript;
           }
@@ -93,6 +105,17 @@ export const useSpeech = (): UseSpeechReturn => {
           }
           return prev + interimTranscript;
         });
+        
+        // Start silence timeout after receiving speech
+        if (hasReceivedSpeechRef.current) {
+          silenceTimeoutRef.current = setTimeout(() => {
+            console.log('Silence detected, stopping listening');
+            if (recognitionRef.current) {
+              recognitionRef.current.stop();
+            }
+            setIsListening(false);
+          }, SILENCE_TIMEOUT);
+        }
       };
 
       recognition.onerror = (event) => {
@@ -125,24 +148,48 @@ export const useSpeech = (): UseSpeechReturn => {
     };
   }, [letsTalkMode, isListening]);
 
+  const clearAllTimeouts = useCallback(() => {
+    if (maxTimeoutRef.current) {
+      clearTimeout(maxTimeoutRef.current);
+      maxTimeoutRef.current = null;
+    }
+    if (silenceTimeoutRef.current) {
+      clearTimeout(silenceTimeoutRef.current);
+      silenceTimeoutRef.current = null;
+    }
+  }, []);
+
   const startListening = useCallback(() => {
     if (recognitionRef.current && !isListening) {
       setTranscript('');
+      hasReceivedSpeechRef.current = false;
+      clearAllTimeouts();
+      
       try {
         recognitionRef.current.start();
         setIsListening(true);
+        
+        // Set max listening timeout (30 seconds)
+        maxTimeoutRef.current = setTimeout(() => {
+          console.log('Max listening time reached, stopping');
+          if (recognitionRef.current) {
+            recognitionRef.current.stop();
+          }
+          setIsListening(false);
+        }, MAX_LISTEN_TIME);
       } catch (e) {
         console.error('Failed to start recognition:', e);
       }
     }
-  }, [isListening]);
+  }, [isListening, clearAllTimeouts]);
 
   const stopListening = useCallback(() => {
+    clearAllTimeouts();
     if (recognitionRef.current && isListening) {
       recognitionRef.current.stop();
       setIsListening(false);
     }
-  }, [isListening]);
+  }, [isListening, clearAllTimeouts]);
 
   const resetTranscript = useCallback(() => {
     setTranscript('');
