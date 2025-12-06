@@ -38,6 +38,7 @@ export const useMathTutor = (user: User | null) => {
   const [guidanceMode, setGuidanceMode] = useState<GuidanceMode | null>(null);
   const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
   const [celebration, setCelebration] = useState<CelebrationData>({ show: false, pointsEarned: 0 });
+  const [showSessionComplete, setShowSessionComplete] = useState(false);
   const { toast } = useToast();
 
   // Load existing session on mount
@@ -286,6 +287,33 @@ export const useMathTutor = (user: User | null) => {
 
   const dismissCelebration = useCallback(() => {
     setCelebration({ show: false, pointsEarned: 0 });
+    // Show session complete dialog after celebration
+    if (currentSession?.isCompleted) {
+      setShowSessionComplete(true);
+    }
+  }, [currentSession?.isCompleted]);
+
+  const startNewProblem = useCallback(() => {
+    // Keep mode, reset everything else for new problem
+    setMessages([]);
+    setUploadedImage(null);
+    setHasStarted(false);
+    setCurrentSession(null);
+    setCurrentSessionId(null);
+    setShowSessionComplete(false);
+  }, []);
+
+  const endSession = useCallback(() => {
+    // Full reset including mode
+    setMessages([]);
+    setUploadedImage(null);
+    setHasStarted(false);
+    setIsLoading(false);
+    setGuidanceMode(null);
+    setCurrentSession(null);
+    setCurrentSessionId(null);
+    setCelebration({ show: false, pointsEarned: 0 });
+    setShowSessionComplete(false);
   }, []);
 
   const reset = useCallback(() => {
@@ -297,6 +325,7 @@ export const useMathTutor = (user: User | null) => {
     setCurrentSession(null);
     setCurrentSessionId(null);
     setCelebration({ show: false, pointsEarned: 0 });
+    setShowSessionComplete(false);
   }, []);
 
   return {
@@ -306,10 +335,13 @@ export const useMathTutor = (user: User | null) => {
     uploadedImage,
     guidanceMode,
     celebration,
+    showSessionComplete,
     startWithImage,
     sendMessage,
     selectMode,
     reset,
     dismissCelebration,
+    startNewProblem,
+    endSession,
   };
 };
