@@ -12,12 +12,20 @@ import {
   getSession, 
   getCurrentSessionId, 
   setCurrentSessionId,
-  addScore
+  addScore,
+  ScoreResult
 } from '@/lib/storage';
 
 interface Message {
   role: "user" | "assistant";
   content: string;
+}
+
+export interface CelebrationData {
+  show: boolean;
+  pointsEarned: number;
+  previousRank?: number;
+  newRank?: number;
 }
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/math-tutor`;
@@ -29,6 +37,7 @@ export const useMathTutor = (user: User | null) => {
   const [hasStarted, setHasStarted] = useState(false);
   const [guidanceMode, setGuidanceMode] = useState<GuidanceMode | null>(null);
   const [currentSession, setCurrentSession] = useState<ChatSession | null>(null);
+  const [celebration, setCelebration] = useState<CelebrationData>({ show: false, pointsEarned: 0 });
   const { toast } = useToast();
 
   // Load existing session on mount
@@ -239,17 +248,39 @@ export const useMathTutor = (user: User | null) => {
       await processStream(response, updateAssistant, () => {
         setIsLoading(false);
         
-        // Check if problem is completed
-        if (assistantContent.toLowerCase().includes('congratulations') || 
-            assistantContent.toLowerCase().includes("you've solved") ||
-            assistantContent.toLowerCase().includes('excellent work')) {
-          if (currentSession && user) {
+        // Check if answer is correct (look for positive feedback patterns)
+        const lowerContent = assistantContent.toLowerCase();
+        const isCorrectAnswer = lowerContent.includes('correct') || 
+                               lowerContent.includes('right') ||
+                               lowerContent.includes('exactly') ||
+                               lowerContent.includes('well done') ||
+                               lowerContent.includes('great job') ||
+                               lowerContent.includes('perfect');
+        
+        const isProblemCompleted = lowerContent.includes('congratulations') || 
+                                   lowerContent.includes("you've solved") ||
+                                   lowerContent.includes('excellent work') ||
+                                   lowerContent.includes('problem is complete');
+        
+        if ((isCorrectAnswer || isProblemCompleted) && currentSession && user) {
+          // Calculate points
+          const baseScore = guidanceMode === 'guided' ? 100 : 50;
+          const score = isProblemCompleted ? baseScore : Math.floor(baseScore * 0.25);
+          
+          const result: ScoreResult = addScore(user.id, user.name, score);
+          
+          // Show celebration
+          setCelebration({
+            show: true,
+            pointsEarned: score,
+            previousRank: result.previousRank || undefined,
+            newRank: result.newRank,
+          });
+          
+          if (isProblemCompleted) {
             const completedSession = { ...currentSession, isCompleted: true };
             updateSession(completedSession);
             setCurrentSession(completedSession);
-            
-            const score = guidanceMode === 'guided' ? 100 : 50;
-            addScore(user.id, user.name, score);
           }
         }
       });
@@ -264,6 +295,10 @@ export const useMathTutor = (user: User | null) => {
     }
   }, [messages, uploadedImage, guidanceMode, currentSession, user, streamChat, processStream, toast]);
 
+  const dismissCelebration = useCallback(() => {
+    setCelebration({ show: false, pointsEarned: 0 });
+  }, []);
+
   const reset = useCallback(() => {
     setMessages([]);
     setUploadedImage(null);
@@ -272,6 +307,7 @@ export const useMathTutor = (user: User | null) => {
     setGuidanceMode(null);
     setCurrentSession(null);
     setCurrentSessionId(null);
+    setCelebration({ show: false, pointsEarned: 0 });
   }, []);
 
   return {
@@ -280,9 +316,11 @@ export const useMathTutor = (user: User | null) => {
     hasStarted,
     uploadedImage,
     guidanceMode,
+    celebration,
     startWithImage,
     sendMessage,
     selectMode,
     reset,
+    dismissCelebration,
   };
 };

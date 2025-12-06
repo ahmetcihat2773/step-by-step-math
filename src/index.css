@@ -194,6 +194,14 @@
     animation: pulseSoft 2s ease-in-out infinite;
   }
 
+  .animate-celebration-pop {
+    animation: celebrationPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .animate-confetti {
+    animation: confettiFall linear forwards;
+  }
+
   @keyframes fadeIn {
     from {
       opacity: 0;
@@ -220,6 +228,31 @@
     }
     50% {
       opacity: 0.7;
+    }
+  }
+
+  @keyframes celebrationPop {
+    0% {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+    50% {
+      transform: scale(1.1);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes confettiFall {
+    0% {
+      transform: translateY(0) rotate(0deg);
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(100vh) rotate(720deg);
+      opacity: 0;
     }
   }
 }
