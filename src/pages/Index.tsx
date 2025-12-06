@@ -1,21 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useMathTutor } from '@/hooks/useMathTutor';
 import { ImageUpload } from '@/components/ImageUpload';
 import { ChatMessage } from '@/components/ChatMessage';
-import { ChatInput } from '@/components/ChatInput';
+import { ChatInput, ChatInputRef } from '@/components/ChatInput';
 import { ModeSelector } from '@/components/ModeSelector';
 import { UserSetup } from '@/components/UserSetup';
 import { Leaderboard } from '@/components/Leaderboard';
 import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 import { SessionCompleteDialog } from '@/components/SessionCompleteDialog';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Trophy, BookOpen, Zap } from 'lucide-react';
+import { RefreshCw, Trophy, BookOpen, Zap, Target } from 'lucide-react';
 import { User } from '@/types/mathTutor';
 import { getCurrentUser, initializeDemoData } from '@/lib/storage';
+
+interface LocationState {
+  practiceMode?: boolean;
+  practiceTopic?: string;
+}
 
 export default function Index() {
   const [user, setUser] = useState<User | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const chatInputRef = useRef<ChatInputRef>(null);
   
   const {
     messages,
@@ -25,6 +34,7 @@ export default function Index() {
     guidanceMode,
     celebration,
     showSessionComplete,
+    detectedTopic,
     sendMessage,
     startWithImage,
     selectMode,
@@ -32,6 +42,8 @@ export default function Index() {
     dismissCelebration,
     startNewProblem,
     endSession,
+    practiceSimilarQuestions,
+    startPracticeSession,
   } = useMathTutor(user);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -45,6 +57,16 @@ export default function Index() {
     }
   }, []);
 
+  // Handle practice mode from navigation
+  useEffect(() => {
+    const state = location.state as LocationState | null;
+    if (state?.practiceMode && state?.practiceTopic && user && guidanceMode) {
+      startPracticeSession(state.practiceTopic);
+      // Clear the navigation state
+      navigate('/', { replace: true, state: {} });
+    }
+  }, [location.state, user, guidanceMode, startPracticeSession, navigate]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -56,6 +78,11 @@ export default function Index() {
   const handleReset = () => {
     reset();
     setShowLeaderboard(false);
+  };
+
+  const handleSendMessage = (message: string) => {
+    sendMessage(message);
+    // Focus will be handled by ChatInput component
   };
 
   // User setup screen
@@ -108,6 +135,20 @@ export default function Index() {
                 {guidanceMode === 'guided' ? 'Guided' : 'Soft'} Mode
               </div>
             )}
+            {detectedTopic && hasStarted && (
+              <div className="px-3 py-1 rounded-full text-xs font-medium bg-secondary text-secondary-foreground">
+                {detectedTopic}
+              </div>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate('/practice')}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <Target className="w-4 h-4 mr-1" />
+              Practice
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -174,7 +215,7 @@ export default function Index() {
 
             {/* Input */}
             <div className="space-y-3">
-              <ChatInput onSend={sendMessage} disabled={isLoading} />
+              <ChatInput ref={chatInputRef} onSend={handleSendMessage} disabled={isLoading} />
               <div className="flex justify-center">
                 <Button
                   variant="ghost"
@@ -208,8 +249,10 @@ export default function Index() {
       {/* Session Complete Dialog */}
       <SessionCompleteDialog
         show={showSessionComplete}
+        topic={detectedTopic || undefined}
         onNewProblem={startNewProblem}
         onEndSession={endSession}
+        onPracticeSimilar={practiceSimilarQuestions}
       />
     </div>
   );

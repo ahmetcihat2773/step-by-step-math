@@ -1,17 +1,21 @@
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { PlusCircle, LogOut, Trophy } from 'lucide-react';
+import { PlusCircle, LogOut, Trophy, Target } from 'lucide-react';
 
 interface SessionCompleteDialogProps {
   show: boolean;
+  topic?: string;
   onNewProblem: () => void;
   onEndSession: () => void;
+  onPracticeSimilar?: () => void;
 }
 
 export const SessionCompleteDialog = ({
   show,
+  topic,
   onNewProblem,
   onEndSession,
+  onPracticeSimilar,
 }: SessionCompleteDialogProps) => {
   if (!show) return null;
 
@@ -28,11 +32,29 @@ export const SessionCompleteDialog = ({
             <p className="text-muted-foreground mt-1">
               Great job! Would you like to continue practicing?
             </p>
+            {topic && (
+              <p className="text-sm text-primary mt-2 font-medium">
+                Topic: {topic}
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col gap-3 pt-4">
+            {topic && onPracticeSimilar && (
+              <Button
+                onClick={onPracticeSimilar}
+                variant="default"
+                className="w-full gap-2 bg-accent hover:bg-accent/90"
+                size="lg"
+              >
+                <Target className="w-5 h-5" />
+                Practice Similar Questions
+              </Button>
+            )}
+            
             <Button
               onClick={onNewProblem}
+              variant={topic ? "outline" : "default"}
               className="w-full gap-2"
               size="lg"
             >
@@ -41,9 +63,9 @@ export const SessionCompleteDialog = ({
             </Button>
             
             <Button
-              variant="outline"
+              variant="ghost"
               onClick={onEndSession}
-              className="w-full gap-2"
+              className="w-full gap-2 text-muted-foreground"
               size="lg"
             >
               <LogOut className="w-5 h-5" />
