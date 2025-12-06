@@ -80,6 +80,9 @@ export const useSpeech = (): UseSpeechReturn => {
     setSpeechSupported(!!SpeechRecognition && !!window.speechSynthesis);
   }, []);
 
+  // Track finalized text outside the effect to persist across re-renders
+  const finalizedTextRef = useRef('');
+
   // Initialize speech recognition ONCE
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -97,27 +100,27 @@ export const useSpeech = (): UseSpeechReturn => {
           clearTimeout(silenceTimeoutRef.current);
         }
         
-        let finalTranscript = '';
-        let interimTranscript = '';
+        let currentInterim = '';
 
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcriptText = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalTranscript += transcriptText + ' ';
-            hasReceivedSpeechRef.current = true;
+        // Process all results
+        for (let i = 0; i < event.results.length; i++) {
+          const result = event.results[i];
+          const transcriptText = result[0].transcript;
+          
+          if (result.isFinal) {
+            // Only add to finalized if we haven't processed this result before
+            if (i >= event.resultIndex) {
+              finalizedTextRef.current += transcriptText + ' ';
+              hasReceivedSpeechRef.current = true;
+            }
           } else {
-            interimTranscript += transcriptText;
+            // Interim result - just show current progress, don't accumulate
+            currentInterim = transcriptText;
           }
         }
 
-        setTranscript(prev => {
-          if (finalTranscript) {
-            return prev + finalTranscript;
-          }
-          // For interim results, show the current progress
-          const baseTranscript = prev.replace(/[^.!?]*$/, ''); // Keep only completed sentences
-          return prev.includes(interimTranscript) ? prev : prev + interimTranscript;
-        });
+        // Set transcript: finalized text + current interim (replacing, not appending)
+        setTranscript(finalizedTextRef.current + currentInterim);
         
         // Start silence timeout after receiving speech
         if (hasReceivedSpeechRef.current) {
@@ -187,6 +190,7 @@ export const useSpeech = (): UseSpeechReturn => {
   const startListening = useCallback(() => {
     if (recognitionRef.current && !isListeningRef.current) {
       setTranscript('');
+      finalizedTextRef.current = ''; // Reset finalized text for new session
       hasReceivedSpeechRef.current = false;
       clearAllTimeouts();
       
