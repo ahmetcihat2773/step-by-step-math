@@ -248,25 +248,16 @@ export const useMathTutor = (user: User | null) => {
       await processStream(response, updateAssistant, () => {
         setIsLoading(false);
         
-        // Check if answer is correct (look for positive feedback patterns)
+        // Only award points when the entire problem is completed
         const lowerContent = assistantContent.toLowerCase();
-        const isCorrectAnswer = lowerContent.includes('correct') || 
-                               lowerContent.includes('right') ||
-                               lowerContent.includes('exactly') ||
-                               lowerContent.includes('well done') ||
-                               lowerContent.includes('great job') ||
-                               lowerContent.includes('perfect');
-        
         const isProblemCompleted = lowerContent.includes('congratulations') || 
                                    lowerContent.includes("you've solved") ||
                                    lowerContent.includes('excellent work') ||
-                                   lowerContent.includes('problem is complete');
+                                   lowerContent.includes('problem is complete') ||
+                                   lowerContent.includes('successfully solved');
         
-        if ((isCorrectAnswer || isProblemCompleted) && currentSession && user) {
-          // Calculate points
-          const baseScore = guidanceMode === 'guided' ? 100 : 50;
-          const score = isProblemCompleted ? baseScore : Math.floor(baseScore * 0.25);
-          
+        if (isProblemCompleted && currentSession && user) {
+          const score = guidanceMode === 'guided' ? 100 : 50;
           const result: ScoreResult = addScore(user.id, user.name, score);
           
           // Show celebration
@@ -277,11 +268,9 @@ export const useMathTutor = (user: User | null) => {
             newRank: result.newRank,
           });
           
-          if (isProblemCompleted) {
-            const completedSession = { ...currentSession, isCompleted: true };
-            updateSession(completedSession);
-            setCurrentSession(completedSession);
-          }
+          const completedSession = { ...currentSession, isCompleted: true };
+          updateSession(completedSession);
+          setCurrentSession(completedSession);
         }
       });
     } catch (error) {
