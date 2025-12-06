@@ -89,8 +89,8 @@ export default function Index() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     
-    // In Let's Talk mode, speak new assistant messages
-    if (letsTalkMode && messages.length > prevMessagesLengthRef.current) {
+    // Speak new assistant messages (always, not just in Let's Talk mode)
+    if (messages.length > prevMessagesLengthRef.current) {
       const lastMessage = messages[messages.length - 1];
       if (lastMessage?.role === 'assistant' && !isLoading) {
         // Only speak if this is a new complete message
@@ -101,7 +101,7 @@ export default function Index() {
       }
     }
     prevMessagesLengthRef.current = messages.length;
-  }, [messages, letsTalkMode, isLoading, speak, lastSpokenMessage]);
+  }, [messages, isLoading, speak, lastSpokenMessage]);
 
   const handleImageSelect = (base64: string) => {
     startWithImage(base64);
