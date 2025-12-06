@@ -320,6 +320,79 @@ export const useMathTutor = (user: User | null) => {
     }
   }, [user, guidanceMode, streamChat, processStream, toast, detectedTopic]);
 
+  const startWithText = useCallback(async (problemText: string) => {
+    if (!user || !guidanceMode) return;
+
+    setIsLoading(true);
+    setHasStarted(true);
+    setPracticeMode(false);
+    setPracticeTopic(null);
+
+    // Create new session
+    const newSession: ChatSession = {
+      id: crypto.randomUUID(),
+      userId: user.id,
+      problemText,
+      problemImageUrl: '',
+      guidanceMode,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      messages: [],
+      currentStepIndex: 0,
+      solutionSteps: [],
+      isCompleted: false,
+      currentQuestion: '',
+    };
+
+    createSession(newSession);
+    setCurrentSessionId(newSession.id);
+    setCurrentSession(newSession);
+
+    // Add user message with the problem
+    const userMessage: Message = { role: "user", content: `Please help me solve this problem: ${problemText}` };
+    setMessages([userMessage]);
+
+    let assistantContent = "";
+
+    const updateAssistant = (chunk: string) => {
+      assistantContent += chunk;
+      
+      // Try to extract topic from the response
+      if (!detectedTopic) {
+        const topic = extractTopic(assistantContent);
+        if (topic) {
+          setDetectedTopic(topic);
+          if (user) {
+            updateTopicStats(user.id, topic, false, true);
+          }
+        }
+      }
+      
+      setMessages(prev => {
+        const last = prev[prev.length - 1];
+        if (last?.role === "assistant") {
+          return prev.map((m, i) =>
+            i === prev.length - 1 ? { ...m, content: assistantContent } : m
+          );
+        }
+        return [...prev, { role: "assistant", content: assistantContent }];
+      });
+    };
+
+    try {
+      const response = await streamChat([userMessage], null, guidanceMode);
+      await processStream(response, updateAssistant, () => setIsLoading(false));
+    } catch (error) {
+      console.error("Error:", error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "An error occurred",
+        variant: "destructive",
+      });
+      setIsLoading(false);
+    }
+  }, [user, guidanceMode, streamChat, processStream, toast, detectedTopic]);
+
   const sendMessage = useCallback(async (content: string) => {
     if (!guidanceMode) return;
     
@@ -470,6 +543,7 @@ export const useMathTutor = (user: User | null) => {
     showSessionComplete,
     detectedTopic,
     startWithImage,
+    startWithText,
     sendMessage,
     selectMode,
     reset,

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMathTutor } from '@/hooks/useMathTutor';
+import { useSpeech } from '@/hooks/useSpeech';
 import { ImageUpload } from '@/components/ImageUpload';
 import { ChatMessage } from '@/components/ChatMessage';
 import { ChatInput, ChatInputRef } from '@/components/ChatInput';
@@ -9,6 +10,7 @@ import { UserSetup } from '@/components/UserSetup';
 import { Leaderboard } from '@/components/Leaderboard';
 import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 import { SessionCompleteDialog } from '@/components/SessionCompleteDialog';
+import { VoiceInput } from '@/components/VoiceInput';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Trophy, BookOpen, Zap, Target } from 'lucide-react';
 import { User } from '@/types/mathTutor';
@@ -22,6 +24,7 @@ interface LocationState {
 export default function Index() {
   const [user, setUser] = useState<User | null>(null);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [lastSpokenMessage, setLastSpokenMessage] = useState<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const chatInputRef = useRef<ChatInputRef>(null);
@@ -37,6 +40,7 @@ export default function Index() {
     detectedTopic,
     sendMessage,
     startWithImage,
+    startWithText,
     selectMode,
     reset,
     dismissCelebration,
@@ -46,7 +50,22 @@ export default function Index() {
     startPracticeSession,
   } = useMathTutor(user);
 
+  const {
+    isListening,
+    transcript,
+    startListening,
+    stopListening,
+    resetTranscript,
+    speechSupported,
+    isSpeaking,
+    speak,
+    stopSpeaking,
+    letsTalkMode,
+    setLetsTalkMode,
+  } = useSpeech();
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const prevMessagesLengthRef = useRef<number>(0);
 
   // Initialize demo data and check for existing user
   useEffect(() => {
@@ -69,7 +88,20 @@ export default function Index() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    
+    // In Let's Talk mode, speak new assistant messages
+    if (letsTalkMode && messages.length > prevMessagesLengthRef.current) {
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage?.role === 'assistant' && !isLoading) {
+        // Only speak if this is a new complete message
+        if (lastMessage.content !== lastSpokenMessage) {
+          speak(lastMessage.content);
+          setLastSpokenMessage(lastMessage.content);
+        }
+      }
+    }
+    prevMessagesLengthRef.current = messages.length;
+  }, [messages, letsTalkMode, isLoading, speak, lastSpokenMessage]);
 
   const handleImageSelect = (base64: string) => {
     startWithImage(base64);
@@ -78,12 +110,57 @@ export default function Index() {
   const handleReset = () => {
     reset();
     setShowLeaderboard(false);
+    setLetsTalkMode(false);
+    resetTranscript();
+    stopSpeaking();
   };
 
   const handleSendMessage = (message: string) => {
     sendMessage(message);
     // Focus will be handled by ChatInput component
   };
+
+  const handleVoiceSubmit = () => {
+    if (transcript.trim()) {
+      if (!hasStarted) {
+        // Starting a new problem with voice
+        startWithText(transcript.trim());
+      } else {
+        // Sending a message during tutoring
+        sendMessage(transcript.trim());
+      }
+      resetTranscript();
+      stopListening();
+    }
+  };
+
+  const handleToggleLetsTalk = () => {
+    const newMode = !letsTalkMode;
+    setLetsTalkMode(newMode);
+    if (!newMode) {
+      stopListening();
+      stopSpeaking();
+    }
+  };
+
+  // Handle Let's Talk mode: auto-send after silence
+  useEffect(() => {
+    if (letsTalkMode && !isListening && transcript.trim() && !isLoading && !isSpeaking) {
+      // Auto-send the transcript after user stops speaking
+      const timer = setTimeout(() => {
+        if (transcript.trim()) {
+          if (!hasStarted) {
+            startWithText(transcript.trim());
+          } else {
+            sendMessage(transcript.trim());
+          }
+          resetTranscript();
+        }
+      }, 1500); // Wait 1.5s of silence before sending
+
+      return () => clearTimeout(timer);
+    }
+  }, [letsTalkMode, isListening, transcript, isLoading, isSpeaking, hasStarted, startWithText, sendMessage, resetTranscript]);
 
   // User setup screen
   if (!user) {
@@ -170,14 +247,41 @@ export default function Index() {
             <ModeSelector onSelectMode={selectMode} />
           </div>
         ) : !hasStarted ? (
-          // Image upload
+          // Image upload and voice input
           <div className="flex-1 flex flex-col items-center justify-center max-w-2xl mx-auto w-full space-y-8">
             <div className="text-center space-y-2">
-              <h2 className="text-2xl font-bold text-foreground">Upload Your Problem</h2>
+              <h2 className="text-2xl font-bold text-foreground">Start Your Problem</h2>
               <p className="text-muted-foreground">
-                Take a photo of your math problem and I'll help you solve it step by step
+                Upload a photo, speak your problem, or use "Let's Talk" for voice-only interaction
               </p>
             </div>
+            
+            {/* Voice Input */}
+            {speechSupported && (
+              <VoiceInput
+                isListening={isListening}
+                isSpeaking={isSpeaking}
+                letsTalkMode={letsTalkMode}
+                speechSupported={speechSupported}
+                transcript={transcript}
+                onStartListening={startListening}
+                onStopListening={stopListening}
+                onStopSpeaking={stopSpeaking}
+                onToggleLetsTalk={handleToggleLetsTalk}
+                onSubmitVoice={handleVoiceSubmit}
+                disabled={isLoading}
+              />
+            )}
+
+            {/* Divider */}
+            {speechSupported && (
+              <div className="flex items-center gap-4 w-full max-w-md">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-sm text-muted-foreground">or</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+            )}
+            
             <ImageUpload onImageSelect={handleImageSelect} disabled={isLoading} />
           </div>
         ) : (
@@ -215,8 +319,40 @@ export default function Index() {
 
             {/* Input */}
             <div className="space-y-3">
-              <ChatInput ref={chatInputRef} onSend={handleSendMessage} disabled={isLoading} />
-              <div className="flex justify-center">
+              {/* Voice controls during chat for Let's Talk mode */}
+              {letsTalkMode && speechSupported && (
+                <div className="flex justify-center mb-2">
+                  <VoiceInput
+                    isListening={isListening}
+                    isSpeaking={isSpeaking}
+                    letsTalkMode={letsTalkMode}
+                    speechSupported={speechSupported}
+                    transcript={transcript}
+                    onStartListening={startListening}
+                    onStopListening={stopListening}
+                    onStopSpeaking={stopSpeaking}
+                    onToggleLetsTalk={handleToggleLetsTalk}
+                    onSubmitVoice={handleVoiceSubmit}
+                    disabled={isLoading}
+                  />
+                </div>
+              )}
+              
+              {!letsTalkMode && (
+                <ChatInput ref={chatInputRef} onSend={handleSendMessage} disabled={isLoading} />
+              )}
+              
+              <div className="flex justify-center gap-2">
+                {!letsTalkMode && speechSupported && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleToggleLetsTalk}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    🎤 Let's Talk
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
