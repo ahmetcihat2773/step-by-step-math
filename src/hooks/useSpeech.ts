@@ -60,6 +60,17 @@ export const useSpeech = (): UseSpeechReturn => {
   const maxTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasReceivedSpeechRef = useRef(false);
+  const isListeningRef = useRef(false);
+  const letsTalkModeRef = useRef(false);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    isListeningRef.current = isListening;
+  }, [isListening]);
+
+  useEffect(() => {
+    letsTalkModeRef.current = letsTalkMode;
+  }, [letsTalkMode]);
 
   // Check browser support
   useEffect(() => {
@@ -69,18 +80,18 @@ export const useSpeech = (): UseSpeechReturn => {
     setSpeechSupported(!!SpeechRecognition && !!window.speechSynthesis);
   }, []);
 
-  // Initialize speech recognition
+  // Initialize speech recognition ONCE
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     
-    if (SpeechRecognition) {
+    if (SpeechRecognition && !recognitionRef.current) {
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = 'en-US';
 
-      recognition.onresult = (event) => {
+      recognition.onresult = (event: any) => {
         // Clear silence timeout on any speech
         if (silenceTimeoutRef.current) {
           clearTimeout(silenceTimeoutRef.current);
@@ -90,12 +101,12 @@ export const useSpeech = (): UseSpeechReturn => {
         let interimTranscript = '';
 
         for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
+          const transcriptText = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
-            finalTranscript += transcript + ' ';
+            finalTranscript += transcriptText + ' ';
             hasReceivedSpeechRef.current = true;
           } else {
-            interimTranscript += transcript;
+            interimTranscript += transcriptText;
           }
         }
 
@@ -103,7 +114,9 @@ export const useSpeech = (): UseSpeechReturn => {
           if (finalTranscript) {
             return prev + finalTranscript;
           }
-          return prev + interimTranscript;
+          // For interim results, show the current progress
+          const baseTranscript = prev.replace(/[^.!?]*$/, ''); // Keep only completed sentences
+          return prev.includes(interimTranscript) ? prev : prev + interimTranscript;
         });
         
         // Start silence timeout after receiving speech
@@ -111,27 +124,35 @@ export const useSpeech = (): UseSpeechReturn => {
           silenceTimeoutRef.current = setTimeout(() => {
             console.log('Silence detected, stopping listening');
             if (recognitionRef.current) {
-              recognitionRef.current.stop();
+              try {
+                recognitionRef.current.stop();
+              } catch (e) {
+                console.error('Error stopping recognition:', e);
+              }
             }
             setIsListening(false);
           }, SILENCE_TIMEOUT);
         }
       };
 
-      recognition.onerror = (event) => {
+      recognition.onerror = (event: any) => {
         console.error('Speech recognition error:', event.error);
-        if (event.error !== 'no-speech') {
+        if (event.error !== 'no-speech' && event.error !== 'aborted') {
           setIsListening(false);
         }
       };
 
       recognition.onend = () => {
-        // Auto restart if still in listening mode and Let's Talk mode
-        if (isListening && letsTalkMode) {
+        console.log('Recognition ended, isListening:', isListeningRef.current, 'letsTalkMode:', letsTalkModeRef.current);
+        // Only auto-restart if we're supposed to be listening and in Let's Talk mode
+        // AND no transcript has been collected yet
+        if (isListeningRef.current && letsTalkModeRef.current && !hasReceivedSpeechRef.current) {
           try {
+            console.log('Restarting recognition...');
             recognition.start();
           } catch (e) {
             console.error('Failed to restart recognition:', e);
+            setIsListening(false);
           }
         } else {
           setIsListening(false);
@@ -143,10 +164,14 @@ export const useSpeech = (): UseSpeechReturn => {
 
     return () => {
       if (recognitionRef.current) {
-        recognitionRef.current.abort();
+        try {
+          recognitionRef.current.abort();
+        } catch (e) {
+          console.error('Error aborting recognition:', e);
+        }
       }
     };
-  }, [letsTalkMode, isListening]);
+  }, []); // Empty dependency - only run once
 
   const clearAllTimeouts = useCallback(() => {
     if (maxTimeoutRef.current) {
@@ -160,7 +185,7 @@ export const useSpeech = (): UseSpeechReturn => {
   }, []);
 
   const startListening = useCallback(() => {
-    if (recognitionRef.current && !isListening) {
+    if (recognitionRef.current && !isListeningRef.current) {
       setTranscript('');
       hasReceivedSpeechRef.current = false;
       clearAllTimeouts();
@@ -168,12 +193,17 @@ export const useSpeech = (): UseSpeechReturn => {
       try {
         recognitionRef.current.start();
         setIsListening(true);
+        console.log('Started listening');
         
         // Set max listening timeout (30 seconds)
         maxTimeoutRef.current = setTimeout(() => {
           console.log('Max listening time reached, stopping');
           if (recognitionRef.current) {
-            recognitionRef.current.stop();
+            try {
+              recognitionRef.current.stop();
+            } catch (e) {
+              console.error('Error stopping recognition:', e);
+            }
           }
           setIsListening(false);
         }, MAX_LISTEN_TIME);
@@ -181,15 +211,20 @@ export const useSpeech = (): UseSpeechReturn => {
         console.error('Failed to start recognition:', e);
       }
     }
-  }, [isListening, clearAllTimeouts]);
+  }, [clearAllTimeouts]);
 
   const stopListening = useCallback(() => {
+    console.log('Stop listening called');
     clearAllTimeouts();
-    if (recognitionRef.current && isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {
+        console.error('Error stopping recognition:', e);
+      }
     }
-  }, [isListening, clearAllTimeouts]);
+    setIsListening(false);
+  }, [clearAllTimeouts]);
 
   const resetTranscript = useCallback(() => {
     setTranscript('');
