@@ -28,12 +28,15 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(({ onSend, dis
     if (message.trim() && !disabled) {
       onSend(message.trim());
       setMessage("");
-      // Keep focus on textarea after sending
-      setTimeout(() => {
-        textareaRef.current?.focus();
-      }, 0);
     }
   };
+
+  // Refocus input after loading completes
+  useEffect(() => {
+    if (!disabled) {
+      textareaRef.current?.focus();
+    }
+  }, [disabled]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -44,10 +47,6 @@ export const ChatInput = forwardRef<ChatInputRef, ChatInputProps>(({ onSend, dis
 
   const handleQuickAction = (value: string) => {
     onSend(value);
-    // Keep focus on textarea after quick action
-    setTimeout(() => {
-      textareaRef.current?.focus();
-    }, 0);
   };
 
   const handleMathInsert = (symbol: string) => {
