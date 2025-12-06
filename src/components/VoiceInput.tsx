@@ -56,7 +56,17 @@ export const VoiceInput = ({
         <Button
           variant={isListening ? "destructive" : "secondary"}
           size="icon"
-          onClick={isListening ? onStopListening : onStartListening}
+          onClick={() => {
+            if (isListening) {
+              onStopListening();
+              // If there's transcript, submit it
+              if (transcript.trim()) {
+                onSubmitVoice();
+              }
+            } else {
+              onStartListening();
+            }
+          }}
           disabled={disabled || isSpeaking}
           className={cn(
             "w-12 h-12 rounded-full transition-all",
