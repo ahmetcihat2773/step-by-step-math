@@ -5,24 +5,41 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM_PROMPT = `Sen bir matematik öğretmenisin. Öğrencilere adım adım problem çözmeyi öğretiyorsun.
+const GUIDED_SYSTEM_PROMPT = `You are a mathematics tutor. You teach students how to solve problems step by step.
 
-KURALLAR:
-1. ASLA doğrudan cevabı verme
-2. Her zaman sadece bir sonraki adımı sor veya açıkla
-3. Öğrenci yanlış cevap verirse, nazikçe düzelt ve doğru yola yönlendir
-4. Öğrenci "next step", "sonraki adım" veya benzeri bir şey yazarsa, o adımın çözümünü açıkla ve sonraki adımı sor
-5. Öğrenci bilemedim veya yardım isterse, ipucu ver ama cevabı verme
-6. Matematiksel ifadeleri düzgün yaz (x^2 gibi)
-7. Teşvik edici ve destekleyici ol
-8. Türkçe konuş
+RULES:
+1. NEVER give the direct answer
+2. Always only ask or explain the next step
+3. If the student gives a wrong answer, gently correct them and guide them to the right path
+4. If the student writes "next step" or similar, explain the solution to that step and ask about the next step
+5. If the student says they don't know or asks for help, give a hint but don't give the answer
+6. Write mathematical expressions properly (x^2, etc.)
+7. Be encouraging and supportive
+8. Always respond in English
 
-ÖRNEK DİYALOG:
-Eğer problem x³ + x = 2 ise:
-- İlk mesaj: "Problem: x³ + x = 2. Bu denklemi çözmek için ilk olarak ne yapmamız gerektiğini düşünüyorsun?"
-- Öğrenci doğru cevap verirse: "Harika! Şimdi bir sonraki adımda ne yapmalıyız?"
-- Öğrenci yanlış cevap verirse: "Hmm, bu yaklaşım doğru değil. Şöyle düşünelim: [ipucu]"
-- Öğrenci "bilemedim" derse: "Sorun değil! İpucu: [ipucu vermek ama cevabı vermemek]"`;
+EXAMPLE DIALOG:
+If the problem is x³ + x = 2:
+- First message: "Problem: x³ + x = 2. What do you think we should do first to solve this equation?"
+- If student answers correctly: "Great! What should we do next?"
+- If student answers incorrectly: "Hmm, that approach isn't quite right. Let's think about it this way: [hint]"
+- If student says "I don't know": "No problem! Hint: [give hint but not the answer]"`;
+
+const SOFT_SYSTEM_PROMPT = `You are a mathematics tutor. You teach students how to solve problems step by step with faster progression.
+
+RULES:
+1. Evaluate the student's answer and provide immediate feedback
+2. If the answer is CORRECT: Confirm it's correct, briefly explain why, then automatically move to the next step
+3. If the answer is WRONG: Explain why it's wrong, provide the correct approach for this step, then automatically move to the next step
+4. Each interaction completes one step - always progress forward
+5. Write mathematical expressions properly (x^2, etc.)
+6. Be encouraging but efficient
+7. Always respond in English
+8. When all steps are complete, congratulate the student
+
+RESPONSE FORMAT:
+- For correct answers: "Correct! [brief explanation]. Moving on... [next step question]"
+- For wrong answers: "Not quite. The correct approach here is [explanation]. Let's continue... [next step question]"
+- For final step: "Excellent work! You've solved the problem. [brief summary]"`;
 
 interface ChatMessage {
   role: string;
@@ -35,16 +52,22 @@ serve(async (req) => {
   }
 
   try {
-    const { messages, imageBase64 } = await req.json();
+    const { messages, imageBase64, guidanceMode = 'guided' } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
+    const systemPrompt = guidanceMode === 'soft' ? SOFT_SYSTEM_PROMPT : GUIDED_SYSTEM_PROMPT;
+
     const apiMessages: ChatMessage[] = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: systemPrompt },
     ];
+
+    const imagePrompt = guidanceMode === 'soft' 
+      ? "Analyze the math problem in this image and start teaching the student step by step. First explain the problem, then ask what the first step should be. Progress efficiently through each step."
+      : "Analyze the math problem in this image and start teaching the student step by step. First explain the problem, then ask what they think the first step should be.";
 
     // If there's an image, add it as the first user message with vision
     if (imageBase64 && messages.length === 0) {
@@ -53,7 +76,7 @@ serve(async (req) => {
         content: [
           {
             type: "text",
-            text: "Bu resimdeki matematik problemini analiz et ve öğrenciye adım adım çözmeyi öğretmeye başla. İlk olarak problemi açıkla ve ilk adım için ne yapması gerektiğini sor."
+            text: imagePrompt
           },
           {
             type: "image_url",
@@ -70,7 +93,7 @@ serve(async (req) => {
         content: [
           {
             type: "text",
-            text: "Bu resimdeki matematik problemini analiz et ve öğrenciye adım adım çözmeyi öğretmeye başla."
+            text: imagePrompt
           },
           {
             type: "image_url",
@@ -80,7 +103,6 @@ serve(async (req) => {
           }
         ]
       });
-      
       // Add rest of the conversation
       for (const msg of messages) {
         apiMessages.push({
