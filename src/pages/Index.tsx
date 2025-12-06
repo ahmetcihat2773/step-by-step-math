@@ -6,6 +6,7 @@ import { ChatInput } from '@/components/ChatInput';
 import { ModeSelector } from '@/components/ModeSelector';
 import { UserSetup } from '@/components/UserSetup';
 import { Leaderboard } from '@/components/Leaderboard';
+import { CelebrationOverlay } from '@/components/CelebrationOverlay';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Trophy, BookOpen, Zap } from 'lucide-react';
 import { User } from '@/types/mathTutor';
@@ -21,10 +22,12 @@ export default function Index() {
     hasStarted,
     uploadedImage,
     guidanceMode,
+    celebration,
     sendMessage,
     startWithImage,
     selectMode,
     reset,
+    dismissCelebration,
   } = useMathTutor(user);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -188,6 +191,15 @@ export default function Index() {
       <footer className="border-t border-border py-4 text-center text-sm text-muted-foreground">
         Learn math step by step with AI guidance
       </footer>
+
+      {/* Celebration Overlay */}
+      <CelebrationOverlay
+        show={celebration.show}
+        pointsEarned={celebration.pointsEarned}
+        newRank={celebration.newRank}
+        previousRank={celebration.previousRank}
+        onComplete={dismissCelebration}
+      />
     </div>
   );
 }

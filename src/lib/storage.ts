@@ -120,15 +120,35 @@ export function getLeaderboard(): LeaderboardEntry[] {
   return entries.sort((a, b) => b.score - a.score);
 }
 
-export function addScore(userId: string, userName: string, score: number): void {
+export function getUserRank(userId: string): number | null {
   const leaderboard = getLeaderboard();
+  const index = leaderboard.findIndex(e => e.userId === userId);
+  return index !== -1 ? index + 1 : null;
+}
+
+export interface ScoreResult {
+  previousRank: number | null;
+  newRank: number;
+  totalScore: number;
+}
+
+export function addScore(userId: string, userName: string, score: number): ScoreResult {
+  const leaderboard = getLeaderboard();
+  const previousRank = getUserRank(userId);
   const existing = leaderboard.find(e => e.userId === userId);
+  
+  let totalScore = score;
   
   if (existing) {
     existing.score += score;
+    totalScore = existing.score;
   } else {
     leaderboard.push({ userId, userName, score });
   }
   
   localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(leaderboard));
+  
+  const newRank = getUserRank(userId) || leaderboard.length;
+  
+  return { previousRank, newRank, totalScore };
 }
